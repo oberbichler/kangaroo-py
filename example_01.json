@@ -1,0 +1,48 @@
+{
+  "particles": [
+    {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0,
+      "stiffness": 0.0
+    },
+    {
+      "x": -1.0,
+      "y": 1.0,
+      "z": 0.0,
+      "stiffness": 10000.0
+    },
+    {
+      "x": 1.0,
+      "y": 0.0,
+      "z": 0.0,
+      "stiffness": 10000.0
+    },
+    {
+      "x": 0,
+      "y": 2,
+      "z": 0,
+      "stiffness": 10000.0
+    }
+  ],
+  "springs": [
+    {
+      "particle_a": 0,
+      "particle_b": 1,
+      "rest_length": 0.0,
+      "stiffness": 3.5355339059327373
+    },
+    {
+      "particle_a": 0,
+      "particle_b": 2,
+      "rest_length": 0.0,
+      "stiffness": 6.0
+    },
+    {
+      "particle_a": 0,
+      "particle_b": 3,
+      "rest_length": 0.0,
+      "stiffness": 2.5
+    }
+  ]
+}
