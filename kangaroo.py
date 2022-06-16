@@ -34,7 +34,7 @@ class Spring:
         self.stiffness = stiffness
 
         self.force = np.zeros((2, 3))
-        self.lumped_mass = np.array([2.0 * stiffness, 2.0 * stiffness])
+        self.lumped_mass = np.array([2.0 * stiffness, 2.0 * stiffness])  # "2.0 *" is just required to reproduce the same results as Kangaroo3d.
 
     def compute(self):
         particle_a, particle_b = self.particles
