@@ -23,7 +23,7 @@ class Particle:
     def __init__(self, x, y, z):
         self.position = np.asarray([x, y, z], float)
         self.velocity = np.zeros(3)
-        self.force = np.zeros(3)
+        self.move = np.zeros(3)
         self.mass = 0.0
 
 
@@ -33,8 +33,8 @@ class Spring:
         self.rest_length = rest_length
         self.stiffness = stiffness
 
-        self.force = np.zeros((2, 3))
-        self.lumped_mass = np.array([2.0 * stiffness, 2.0 * stiffness])  # "2.0 *" is just required to reproduce the same results as Kangaroo3d.
+        self.move = np.zeros((2, 3))
+        self.weighting = np.array([2.0 * stiffness, 2.0 * stiffness])  # "2.0 *" is just required to reproduce the same results as Kangaroo3d.
 
     def compute(self):
         particle_a, particle_b = self.particles
@@ -48,8 +48,8 @@ class Spring:
 
         direction = v / actual_length
         
-        self.force[0] = delta * self.stiffness * direction
-        self.force[1] = -self.force[0]
+        self.move[0] = delta * self.stiffness * direction / (2.0 * stiffness) # == 0.5 * delta * direction
+        self.move[1] = -self.move[0]
 
 
 class Anchor:
@@ -58,13 +58,13 @@ class Anchor:
         self.target = particle.position.copy()
         self.stiffness = stiffness
 
-        self.force = np.zeros((1, 3))
-        self.lumped_mass = np.array([stiffness], float)
+        self.move = np.zeros((1, 3))
+        self.weighting = np.array([stiffness], float)
 
     def compute(self):
         delta = self.target - self.particles[0].position
 
-        self.force[0] = delta * self.stiffness
+        self.move[0] = delta * self.stiffness / self.stiffness # == delta
 
 
 class ResidualCriterion:
@@ -211,8 +211,8 @@ def solve(goals, damping=0.9, maxiter=int(1e6), breaking_criterion=None):
 
             # accumulate force and mass at each particle
             for j, particle in enumerate(goal.particles):
-                particle.force += goal.force[j]
-                particle.mass += goal.lumped_mass[j]
+                particle.force += goal.move[j] * goal.weighting[j]
+                particle.mass += goal.weighting[j]
 
         for particle in particles:
             if norm(particle.force) == 0.0:
