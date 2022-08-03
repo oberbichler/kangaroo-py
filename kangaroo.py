@@ -48,7 +48,7 @@ class Spring:
 
         direction = v / actual_length
         
-        self.move[0] = delta * self.stiffness * direction / (2.0 * stiffness) # == 0.5 * delta * direction
+        self.move[0] = delta * self.stiffness * direction / (2.0 * self.stiffness) # == 0.5 * delta * direction
         self.move[1] = -self.move[0]
 
 
