@@ -2,8 +2,9 @@
 kangaroo.py
 by Thomas Oberbichler <thomas.oberbichler@gmail.com> (c) 2022
 
-This is a Python implementation of Dynamic-Relaxation as used in Kangaroo3D
-for Grasshopper (http://kangaroo3d.com/).
+This is a Python implementation of Nesterov-Momentum for form-finding.
+With the current settings it will produce the same results as the solver
+in Kangaroo3D for Grasshopper (http://kangaroo3d.com/).
 
 It contains following goals:
 - Spring
@@ -114,7 +115,7 @@ class KangarooCriterion:
 
 
 def solve(goals, damping=0.9, maxiter=int(1e6), breaking_criterion=None):
-    """Solves a system of goals using Dynamic-Relaxation.
+    """Solves a system of goals using Nesterov-Momentum.
 
 
     Keyword arguments:
@@ -122,60 +123,38 @@ def solve(goals, damping=0.9, maxiter=int(1e6), breaking_criterion=None):
     maxiter -- the maximum number of iterations (default: 1e6)
     breaking_criterion -- the criterion for breaking the solving process (default: KangarooCriterion)
 
-    For each particle we compute the residual force:
-   
-      r_{t} = m a_{t}                                     (1)
-   
-      where:  r ... residual force at the particle
-              m ... mass of the particle
-              a ... accelleration of the particle
-              t ... current time
-   
-    The mass is assumed to be constant over time.
-   
-    The accelleration depends on time. It is given by the
-    derivative of the velocity w.r.t. time. This derivative
-    is approximated by central finite differences:
-   
-      a_{t} = dv/dt ≈ (v_{t+Δt/2} - v_{t-Δt/2}) / Δt      (2)
-   
-      where:  v ... velocity of the particle
-              Δt... change of time
-   
-    From the combination of (1) and (2) we obtain:
-   
-      v_{t+Δt/2} = v_{t-Δt/2} + (r_{t} / m) Δt            (3)
-   
-    We compute the new position of each particle after Δt:
-   
-      x_{t+Δt} = x_t + v_{t+Δt/2} Δt
-   
-      where:  x ... location of the particle
-              t ... time of last iteration
-   
-    The change of the location of the particle is given by:
-   
-      v_{t+Δt/2} Δt = v_{t-Δt/2} Δt + (r_{t} / m) Δt^2   (4)
-                    = Δx_{t-Δt/2}   + Δx_{t}
-   
-    It consists of two parts which result from
-    - the velocity and  -> Δx_{t-Δt/2} = v_{t-Δt/2} Δt    (5)
-    - the acceleration  -> Δx_{t} = (r_{t} / m) Δt^2      (6)
-    of the particle.
-   
-    We use a pseudo-timestep Δt = Δt^2 = 1.
-   
-    Starting at t=0 we move each node by
-    - Δx_{t-Δt/2} at half time steps and
-    - Δx_{t}      at full time steps:
-   
-   
-               Δx_{t}  
-                  ↓
-      t  =  0     1     2     3 ...     n
-              0.5   1.5   2.5       ...
-               ↑
-            Δx_{t-Δt/2}
+    The iteration for Nesterov-Momentum:
+
+      p_{t+1} = \beta p_{t} - \alpha ∇f(x_{t} + \beta p_{t})
+      
+      x_{t+1} = x_{t} + p_{t+1}
+    
+      where t      ... time/iteration
+            x      ... position
+            p      ... momentum (p_{0} = 0)
+            \alpha ... step-size/learing-rate
+            \beta  ... momentum-decay
+
+    The scalar step-size \alpha is replaced with the inverse mass-matrix:
+
+      v_{t+1} = \beta_{t} v_{t} - M^{-1} * r(x_{t} + \beta_{t} v_{t})
+                                \-----------------------------------/
+                                               a_{t}
+
+      x_{t+1} = x_{t} + v_{t+1}
+              = x_{t} + \beta_{t} v_{t} + a_{t}
+
+      where v ... velocity (v_{0} = 0)
+            M ... (artificial) lumped mass-matrix
+            r ... residual force (= ∇f)
+            a ... acceleration
+
+    \beta acts as a damping factor and is adapted in each iteration:
+
+      \beta_{t+1} = 1.0   if a_t @ v_{t+1} >= 0
+                  < 1.0   otherwise
+    
+      where \beta_0 = 0
     """
    
     # use Kangaroos breaking criterion by default
@@ -191,25 +170,19 @@ def solve(goals, damping=0.9, maxiter=int(1e6), breaking_criterion=None):
     print(f'Number of goals:     {len(goals)}')
 
     for i in range(maxiter):
-        # time:
-        # t = i + 0.5
-
         for particle in particles:
-            # apply Δx_{t-Δt/2} -> (5)
+            # move to x_{t} + \beta_{t} v_{t}
             particle.position += particle.velocity
 
             # reset force and mass
             particle.force = np.zeros(3)
             particle.mass = 0.0
 
-        # time:
-        # t = i + 1.0
-
         for goal in goals:
             # compute force and mass contribution of each goal
             goal.compute()
 
-            # accumulate force and mass at each particle
+            # accumulate force and mass at each particle -> r_{t} and M
             for j, particle in enumerate(goal.particles):
                 particle.force += goal.force[j]
                 particle.mass += goal.lumped_mass[j]
@@ -218,18 +191,24 @@ def solve(goals, damping=0.9, maxiter=int(1e6), breaking_criterion=None):
             if norm(particle.force) == 0.0:
                 particle.velocity = np.zeros(3)
             else:
-                dx_a = particle.force / particle.mass
+                # a_{t} = -M^{-1} * r(x_{t} + \beta_{t} v_{t})
+                a_t = particle.force / particle.mass
                 
-                # apply Δx_{t} -> (6)
-                particle.position += dx_a
-                
-                # compute v_{t+Δt/2} -> (4)
-                particle.velocity += dx_a
+                # v_{t+1} = v_{t} + a_{t}
+                particle.velocity += a_t
 
-                # apply damping if Δx_{t} and Δx_{t+Δt/2} are in
-                # opposite direction
-                if dx_a @ particle.velocity < 0.0:
+                # x_{t+1} = x_{t} + \beta_{t} v_{t} + a_{t}
+                #           \---------------------/ \-----/
+                #               applied in L175     missing
+                particle.position += a_t
+
+                # Adapt momentum-decay:
+                # \beta_{t+1} < 1.0    if a_{t} @ v_{t+1} < 0
+                #               1.0    otherwise 
+                if a_t @ particle.velocity < 0.0:
                     particle.velocity *= damping
+
+                # => particle.velocity includes damping (= \beta_{t} * v_{t})
 
         if breaking_criterion(i, particles):
             break
